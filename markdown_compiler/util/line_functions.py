@@ -12,8 +12,8 @@ def _wrap(line, delim, open_tag, close_tag):
         return line
     inner = line[start + len(delim):end]
     rest = line[end + len(delim):]
-    return (line[:start] + open_tag + inner + close_tag
-            + _wrap(rest, delim, open_tag, close_tag))
+    wrapped = open_tag + inner + close_tag
+    return line[:start] + wrapped + _wrap(rest, delim, open_tag, close_tag)
 
 
 def compile_headers(line):
@@ -217,5 +217,5 @@ def compile_images(line):
     alt = line[start + 2:mid]
     url = line[mid + 2:end]
     rest = compile_images(line[end + 1:])
-    return (line[:start] + '<img src="' + url + '" alt="' + alt + '" />'
-            + rest)
+    img = '<img src="' + url + '" alt="' + alt + '" />'
+    return line[:start] + img + rest
