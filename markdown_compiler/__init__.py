@@ -3,7 +3,38 @@ This file contains functions that work on entire documents at a time
 (and not line-by-line).
 '''
 
-from markdown_compiler.util.line_functions import *
+from markdown_compiler.util.line_functions import (
+    compile_headers, compile_strikethrough, compile_bold_stars,
+    compile_bold_underscore, compile_italic_star,
+    compile_italic_underscore, compile_code_inline, compile_images,
+    compile_links)
+
+
+def list_item_text(line):
+    '''
+    Return the text of an ordered list item like "1. text", or None.
+    '''
+    line = line.strip()
+    i = line.find('. ')
+    if i > 0 and line[:i].isdigit():
+        return line[i + 2:]
+    return None
+
+
+def compile_inline(line):
+    '''
+    Apply every inline transformation to one line.
+    '''
+    line = compile_headers(line)
+    line = compile_strikethrough(line)
+    line = compile_bold_stars(line)
+    line = compile_bold_underscore(line)
+    line = compile_italic_star(line)
+    line = compile_italic_underscore(line)
+    line = compile_code_inline(line)
+    line = compile_images(line)
+    line = compile_links(line)
+    return line
 
 
 def compile_lines(text):
@@ -129,30 +160,69 @@ def compile_lines(text):
         print('i=',i)
     </pre>
     <BLANKLINE>
+
+    >>> compile_lines('1. only')
+    '<ol><li>only</li></ol>'
+
+    >>> compile_lines('1. this\n2. is\n3. a\n4. list')
+    '<ol><li>this</li><li>is</li><li>a</li><li>list</li></ol>'
+
+    >>> compile_lines('Some text\n\n1. first\n2. second')
+    '<p>\nSome text\n</p>\n<ol><li>first</li><li>second</li></ol>'
     '''
     lines = text.split('\n')
     new_lines = []
     in_paragraph = False
+    in_code = False
+    list_items = []
     for line in lines:
-        line = line.strip()
-        if line=='':
+        item = None
+        if not in_code:
+            item = list_item_text(line)
+
+        if item is None and list_items:
+            new_lines.append(
+                '<ol>'
+                + ''.join('<li>' + compile_inline(x) + '</li>'
+                          for x in list_items)
+                + '</ol>')
+            list_items = []
+
+        if item is not None:
             if in_paragraph:
-                line='</p>'
+                new_lines.append('</p>')
+                in_paragraph = False
+            list_items.append(item)
+            continue
+
+        if line.strip().startswith('```'):
+            if in_code:
+                line = '</pre>'
+                in_code = False
+            else:
+                line = '<pre>'
+                in_code = True
+        elif in_code:
+            pass
+        elif line.strip() == '':
+            line = ''
+            if in_paragraph:
+                line = '</p>'
                 in_paragraph = False
         else:
+            line = line.strip()
             if line[0] != '#' and not in_paragraph:
                 in_paragraph = True
-                line = '<p>\n'+line
-            line = compile_headers(line)
-            line = compile_strikethrough(line)
-            line = compile_bold_stars(line)
-            line = compile_bold_underscore(line)
-            line = compile_italic_star(line)
-            line = compile_italic_underscore(line)
-            line = compile_code_inline(line)
-            line = compile_images(line)
-            line = compile_links(line)
+                line = '<p>\n' + line
+            line = compile_inline(line)
         new_lines.append(line)
+
+    if list_items:
+        new_lines.append(
+            '<ol>'
+            + ''.join('<li>' + compile_inline(x) + '</li>'
+                      for x in list_items)
+            + '</ol>')
     new_text = '\n'.join(new_lines)
     return new_text
 
@@ -188,10 +258,10 @@ def markdown_to_html(markdown, add_css):
 <link rel="stylesheet" href="https://izbicki.me/css/code.css" />
 <link rel="stylesheet" href="https://izbicki.me/css/default.css" />
         '''
-    html+='''
+    html += '''
 </head>
 <body>
-    '''+compile_lines(markdown)+'''
+    ''' + compile_lines(markdown) + '''
 </body>
 </html>
     '''
@@ -225,7 +295,7 @@ def minify(html):
     >>> minify('a\n\n\n\n\n\n\n\n\n\n\n\n\n\nb\n\n\n\n\n\n\n\n\n\n')
     'a b'
     '''
-    return html
+    return ' '.join(html.split())
 
 
 def convert_file(input_file, add_css):
